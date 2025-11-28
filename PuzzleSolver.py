@@ -1,6 +1,5 @@
 from heapq import heappush, heappop
 
-
 # Goal State, uses 0 as placeholder for blank
 GOAL = (1, 2, 3, 4, 5, 6, 7, 8, 0)
 #List of moves depending on placement/index on the board of 0/blankst
@@ -35,33 +34,27 @@ def manhattan(state):
 
     return total
 
+def reconstruct_path(parent, end):
+    path = [end]
+    while path[-1] in parent:
+        path.append(parent[path[-1]])
+    return list(reversed(path))
+
 def astar(start_state):
     start_state = tuple(start_state)
 
-    # The priority queue stores: (f(n), g(n), state)
     pq = []
     heappush(pq, (manhattan(start_state), 0, start_state))
 
-    # Parent dictionary to reconstruct the final path
     parent = {}
-
-    # g-cost dictionary: cost to reach each state
     g_cost = {start_state: 0}
-
-    # Visited set to avoid reprocessing states
     visited = set()
 
     while pq:
-        f, g, state = heappop(pq)  # pick state with lowest f(n)
+        f, g, state = heappop(pq)
 
         if state == GOAL:
-            # Goal reached! Reconstruct path
-            path = [state]
-            while state in parent:
-                state = parent[state]
-                path.append(state)
-            path.reverse()
-            return path
+            return reconstruct_path(parent, state)
 
         if state in visited:
             continue
@@ -74,65 +67,131 @@ def astar(start_state):
             new_state[zero], new_state[move] = new_state[move], new_state[zero]
             new_state = tuple(new_state)
 
-            new_g = g + 1  # cost to reach neighbor
+            new_g = g + 1
 
-            # if we haven't seen this state or found a cheaper path
             if new_state not in g_cost or new_g < g_cost[new_state]:
                 g_cost[new_state] = new_g
                 parent[new_state] = state
                 f = new_g + manhattan(new_state)
                 heappush(pq, (f, new_g, new_state))
 
+    return None
 
-#prints the states 
-def print_state(state):
-    for i in range(0, 9, 3):
-        print(state[i], state[i+1], state[i+2])
-    print("------")
+def greedy(start_state):
+    start_state = tuple(start_state)
+
+    pq = []
+    heappush(pq, (manhattan(start_state), start_state))
+
+    parent = {}
+    visited = set()
+
+    while pq:
+        h, state = heappop(pq)
+
+        if state == GOAL:
+            return reconstruct_path(parent, state)
+
+        if state in visited:
+            continue
+        visited.add(state)
+
+        zero = state.index(0)
+
+        for move in MOVES[zero]:
+            new_state = list(state)
+            new_state[zero], new_state[move] = new_state[move], new_state[zero]
+            new_state = tuple(new_state)
+
+            if new_state not in visited:
+                parent[new_state] = state
+                heappush(pq, (manhattan(new_state), new_state))
+
+    return None
+          
+
+#prints boards side by side
+#numbers separated by space
+#boars separated by ||
+def print_boards(board1, board2):
+    for i in range(3):
+        #excluded 0
+        row1 = ' '.join(str(x) if x != 0 else ' ' for x in board1[i*3:i*3+3])
+        row2 = ' '.join(str(x) if x != 0 else ' ' for x in board2[i*3:i*3+3])
+        print(f"{row1}     ||     {row2}")
+    print("------    ||    ------\n")
 
 # User Input
 def read_initial_state():
-    print("Enter your puzzle configuration (0 = blank).")
-    print("Make sure no numbers repeat or it will not run")
-    print("Example of one row: 1 2 3\n")
+    print("Enter 9 numbers for the puzzle (0 = blank).")
+    print("Example: 1 2 3 4 5 6 7 8 0\n")
 
-    state = []
-    for i in range(3):
-        row = input(f"Row {i+1}: ").strip().split()
-        if len(row) != 3:
-            raise ValueError("Each row must have exactly 3 numbers.")
-        nums = list(map(int, row))
-        state.extend(nums)
+    nums = input("Enter puzzle: ").strip().split()
+    
+    if len(nums) != 9:
+        raise ValueError("You must enter exactly 9 numbers.")
 
+    # Convert to integers
+    state = list(map(int, nums))
+
+    # Validate numbers are 0-9
     if sorted(state) != list(range(9)):
         raise ValueError("Puzzle must contain all numbers from 0 to 8 exactly once.")
 
     return tuple(state)
 
-def solve_puzzle(start_state, algorithm):
-    " call the chosen search algorithm. algorithm: astar"
+def is_solvable(state):
+    #Checks inversion count by checking the number of reverse orgered pairs
+    arr = [x for x in state if x != 0]  
+    inv_count = 0
+    for i in range(len(arr)):
+        for j in range(i+1, len(arr)):
+            if arr[i] > arr[j]:
+                inv_count += 1
+    # Odd-width grid (3x3): solvable if inversions count is even
+    return inv_count % 2 == 0
 
-    if algorithm == "astar":
-        return astar(start_state)
-    else:
-        raise ValueError("Unknown algorithm: choose 'astar' or '[insert]'")
 
+# Main driver
 if __name__ == "__main__":
     start = read_initial_state()
-
     print("\nInitial board:")
-    print_state(start)
+    print_boards(start, start)
+    
+    if not is_solvable(start):
+        print("This puzzle configuration is NOT solvable.")
+        exit()
 
-    # Choose the algorithm here
-    algorithm = input("Choose algorithm (astar/[insert]) ").strip().lower()
+    path_astar = astar(start)
+    path_greedy = greedy(start)
 
-    path = solve_puzzle(start, algorithm=algorithm)
+    # Check if each algorithm found a solution
+    #Even if complete, A* could fail due to memory issues maybe?
+    if path_astar is None:
+        print("A* did not find a solution.")
+    if path_greedy is None:
+        print("Greedy did not find a solution.")
 
-    if path:
-        print(f"Solution found in {len(path)-1} moves:\n")
-        for step in path:
-            print_state(step)
-    else:
-        print("No solution found.")
+    # Pad shorter path to show side by side completely
+    #have to use due to the nature of zip to stop on shorter iteration
+    prepaddedg_len = len(path_greedy)-1
+    prepaddeda_len = len(path_astar)-1
+    max_len = max(len(path_astar), len(path_greedy))
+    path_astar += [path_astar[-1]] * (max_len - len(path_astar))
+    path_greedy += [path_greedy[-1]] * (max_len - len(path_greedy))
+    
+    print("Greedy BFS||  A* Search")
+    counter = 0
+    for step_astar, step_greedy in zip(path_astar, path_greedy):
+        if counter == 0:
+            print("Initial State:")
+        else:
+            print(f"Step {counter}:")
+        print_boards(step_greedy, step_astar)
+        counter += 1
+    print("Greedy BFS||  A* Search")
+    print("Soln found|| Soln found")
+    print(f"in {prepaddedg_len} moves||in {prepaddeda_len} moves ")
+
 
 
